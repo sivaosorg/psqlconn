@@ -64,10 +64,6 @@ func NewClient(config postgres.PostgresConfig) (*sqlx.DB, dbx.Dbx) {
 }
 
 func GetPostgresPIDConn(db *sqlx.DB) (int, error) {
-	var pid int
-	err := db.QueryRow("SELECT pg_backend_pid() AS pid").Scan(&pid)
-	if err != nil {
-		return 0, err
-	}
-	return pid, nil
+	s := NewPostgresService(db)
+	return s.GetPIDConn()
 }
