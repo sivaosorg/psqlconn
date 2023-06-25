@@ -1,6 +1,9 @@
 package postgresconn
 
 import (
+	"fmt"
+	"io/ioutil"
+	"path/filepath"
 	"strings"
 
 	"github.com/jmoiron/sqlx"
@@ -19,6 +22,8 @@ type PostgresService interface {
 	BuildFunction(function string) (string, error)
 	ShowFunctionContent(function string) (string, error)
 	ShowProcedureContent(procedure string) (string, error)
+	ExplainAnalysis(query string) (string, error)
+	ExplainAnalysisFromFile(filename string) (string, error)
 }
 
 type postgresServiceImpl struct {
@@ -150,4 +155,34 @@ func (p *postgresServiceImpl) ShowProcedureContent(procedure string) (string, er
 		return "", err
 	}
 	return procedureContent, nil
+}
+
+func (p *postgresServiceImpl) ExplainAnalysis(query string) (string, error) {
+	rows, err := p.dbConn.Query(fmt.Sprintf("EXPLAIN ANALYZE %v", query))
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	var explain strings.Builder
+	for rows.Next() {
+		var line string
+		if err = rows.Scan(&line); err != nil {
+			return "", err
+		}
+		explain.WriteString(line)
+		explain.WriteString("\n")
+	}
+	if err = rows.Err(); err != nil {
+		return "", err
+	}
+	return explain.String(), nil
+}
+
+func (p *postgresServiceImpl) ExplainAnalysisFromFile(filename string) (string, error) {
+	bytes, err := ioutil.ReadFile(filepath.Clean(filename))
+	if err != nil {
+		return "", err
+	}
+	query := string(bytes)
+	return p.ExplainAnalysis(query)
 }
