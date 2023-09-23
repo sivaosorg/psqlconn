@@ -12,20 +12,21 @@ import (
 )
 
 type PostgresService interface {
-	GetPIDConn() (int, error)
+	Pid() (int, error)
 	Database() string
-	GetAllTables() ([]string, error)
-	GetAllFunctions() ([]string, error)
-	GetAllProcedures() ([]string, error)
-	GetFunctionDetails(function string) ([]PostgresFunctionDetail, error)
-	GetFunctionReturnType(function string) (string, error)
-	BuildFunction(function string) (string, error)
-	ShowFunctionContent(function string) (string, error)
-	ShowProcedureContent(procedure string) (string, error)
+	Tables() ([]string, error)
+	FunctionsDescriptor() ([]string, error)
+	ProceduresDescriptor() ([]string, error)
+	FunctionDDescriptor(function string) ([]IFunctionDescriptor, error)
+	FunctionReturnType(function string) (string, error)
+	AddFunction(function string) (string, error)
+	FunctionDescriptor(function string) (string, error)
+	ProcedureDescriptor(procedure string) (string, error)
 	ExplainAnalysis(query string) (string, error)
-	ExplainAnalysisFromFile(filename string) (string, error)
+	ExplainAnalysisFile(filename string) (string, error)
 	ExecuteBatch(statements []string) error
 	ExecuteBatchWithTransaction(statements []string) error
+	TableDescriptor(table string) ([]ITableDescriptor, error)
 }
 
 type postgresServiceImpl struct {
@@ -39,7 +40,7 @@ func NewPostgresService(dbConn *sqlx.DB) PostgresService {
 	return p
 }
 
-func (p *postgresServiceImpl) GetPIDConn() (int, error) {
+func (p *postgresServiceImpl) Pid() (int, error) {
 	var pid int
 	err := p.dbConn.QueryRow("SELECT pg_backend_pid() AS pid").Scan(&pid)
 	if err != nil {
@@ -48,7 +49,7 @@ func (p *postgresServiceImpl) GetPIDConn() (int, error) {
 	return pid, nil
 }
 
-func (p *postgresServiceImpl) GetAllTables() ([]string, error) {
+func (p *postgresServiceImpl) Tables() ([]string, error) {
 	var tableNames []string
 	err := p.dbConn.Select(&tableNames, "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'")
 	if err != nil {
@@ -57,7 +58,7 @@ func (p *postgresServiceImpl) GetAllTables() ([]string, error) {
 	return tableNames, nil
 }
 
-func (p *postgresServiceImpl) GetAllFunctions() ([]string, error) {
+func (p *postgresServiceImpl) FunctionsDescriptor() ([]string, error) {
 	var functions []string
 	err := p.dbConn.Select(&functions, "SELECT routine_name FROM information_schema.routines WHERE routine_catalog = $1 AND routine_schema = 'public' AND routine_type = 'FUNCTION'", p.Database())
 	if err != nil {
@@ -75,7 +76,7 @@ func (p *postgresServiceImpl) Database() string {
 	return database
 }
 
-func (p *postgresServiceImpl) GetAllProcedures() ([]string, error) {
+func (p *postgresServiceImpl) ProceduresDescriptor() ([]string, error) {
 	var procedures []string
 	err := p.dbConn.Select(&procedures, "SELECT routine_name FROM information_schema.routines WHERE routine_catalog = $1 AND routine_schema = 'public' AND routine_type = 'PROCEDURE'", p.Database())
 	if err != nil {
@@ -84,8 +85,8 @@ func (p *postgresServiceImpl) GetAllProcedures() ([]string, error) {
 	return procedures, nil
 }
 
-func (p *postgresServiceImpl) GetFunctionDetails(function string) ([]PostgresFunctionDetail, error) {
-	var functionDetails []PostgresFunctionDetail
+func (p *postgresServiceImpl) FunctionDDescriptor(function string) ([]IFunctionDescriptor, error) {
+	var functionDetails []IFunctionDescriptor
 	err := p.dbConn.Select(&functionDetails, `
 	SELECT 
 		r.routine_name, 
@@ -105,7 +106,7 @@ func (p *postgresServiceImpl) GetFunctionDetails(function string) ([]PostgresFun
 	return functionDetails, nil
 }
 
-func (p *postgresServiceImpl) GetFunctionReturnType(function string) (string, error) {
+func (p *postgresServiceImpl) FunctionReturnType(function string) (string, error) {
 	var returnType string
 	err := p.dbConn.QueryRow("SELECT pg_get_function_result(oid) FROM pg_proc WHERE proname = $1", function).Scan(&returnType)
 	if err != nil {
@@ -114,12 +115,12 @@ func (p *postgresServiceImpl) GetFunctionReturnType(function string) (string, er
 	return returnType, nil
 }
 
-func (p *postgresServiceImpl) BuildFunction(function string) (string, error) {
-	functionDetails, err := p.GetFunctionDetails(function)
+func (p *postgresServiceImpl) AddFunction(function string) (string, error) {
+	functionDetails, err := p.FunctionDDescriptor(function)
 	if err != nil {
 		return "", err
 	}
-	returnType, err := p.GetFunctionReturnType(function)
+	returnType, err := p.FunctionReturnType(function)
 	if err != nil {
 		return "", err
 	}
@@ -141,7 +142,7 @@ func (p *postgresServiceImpl) BuildFunction(function string) (string, error) {
 	return builder.String(), nil
 }
 
-func (ps *postgresServiceImpl) ShowFunctionContent(function string) (string, error) {
+func (ps *postgresServiceImpl) FunctionDescriptor(function string) (string, error) {
 	var functionContent string
 	err := ps.dbConn.QueryRow("SELECT pg_get_functiondef($1::regproc)", function).Scan(&functionContent)
 	if err != nil {
@@ -150,7 +151,7 @@ func (ps *postgresServiceImpl) ShowFunctionContent(function string) (string, err
 	return functionContent, nil
 }
 
-func (p *postgresServiceImpl) ShowProcedureContent(procedure string) (string, error) {
+func (p *postgresServiceImpl) ProcedureDescriptor(procedure string) (string, error) {
 	var procedureContent string
 	err := p.dbConn.QueryRow("SELECT pg_get_functiondef($1::regproc)", procedure).Scan(&procedureContent)
 	if err != nil {
@@ -180,7 +181,7 @@ func (p *postgresServiceImpl) ExplainAnalysis(query string) (string, error) {
 	return explain.String(), nil
 }
 
-func (p *postgresServiceImpl) ExplainAnalysisFromFile(filename string) (string, error) {
+func (p *postgresServiceImpl) ExplainAnalysisFile(filename string) (string, error) {
 	bytes, err := ioutil.ReadFile(filepath.Clean(filename))
 	if err != nil {
 		return "", err
@@ -236,4 +237,41 @@ func (p *postgresServiceImpl) ExecuteBatchWithTransaction(statements []string) e
 		return err
 	}
 	return nil
+}
+
+func (p *postgresServiceImpl) TableDescriptor(table string) ([]ITableDescriptor, error) {
+	s := `
+	SELECT conname AS c_name, 'Primary Key' AS type, '' as descriptor
+	FROM pg_constraint
+	WHERE conrelid = regclass($1)
+	  AND confrelid = 0
+	  AND contype = 'p'
+	UNION
+	SELECT conname AS c_name, 'Unique Key' AS type, '' as descriptor
+	FROM pg_constraint
+	WHERE conrelid = regclass($1)
+	  AND confrelid = 0
+	  AND contype = 'u'
+	UNION
+	SELECT indexname AS c_name, 'Index' AS type, indexdef as descriptor
+	FROM pg_indexes
+	WHERE tablename = $1;
+	`
+	rows, err := p.dbConn.Query(s, table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var results []ITableDescriptor
+	for rows.Next() {
+		var m ITableDescriptor
+		if err := rows.Scan(&m.Name, &m.Type, &m.Descriptor); err != nil {
+			return nil, err
+		}
+		results = append(results, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return results, nil
 }

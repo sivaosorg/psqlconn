@@ -65,5 +65,5 @@ func NewClient(config postgres.PostgresConfig) (*sqlx.DB, dbx.Dbx) {
 
 func GetPostgresPIDConn(db *sqlx.DB) (int, error) {
 	s := NewPostgresService(db)
-	return s.GetPIDConn()
+	return s.Pid()
 }
