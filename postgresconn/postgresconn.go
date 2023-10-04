@@ -1,6 +1,7 @@
 package postgresconn
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
@@ -40,7 +41,9 @@ func NewClient(config postgres.PostgresConfig) (*sqlx.DB, dbx.Dbx) {
 		s.SetError(err).SetConnected(false).SetMessage(err.Error())
 		return nil, *s
 	}
-	err = client.Ping()
+	ctx, cancel := context.WithTimeout(context.Background(), config.Timeout)
+	defer cancel()
+	err = client.PingContext(ctx)
 	if err != nil {
 		s.SetError(err).SetConnected(false).SetMessage(err.Error())
 		return nil, *s
