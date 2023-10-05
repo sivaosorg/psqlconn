@@ -27,6 +27,7 @@ type PostgresService interface {
 	ExecuteBatch(statements []string) error
 	ExecuteBatchWithTransaction(statements []string) error
 	TableDescriptor(table string) ([]ITableDescriptor, error)
+	TableInfo(table string) ([]ITableInfo, error)
 }
 
 type postgresServiceImpl struct {
@@ -266,6 +267,36 @@ func (p *postgresServiceImpl) TableDescriptor(table string) ([]ITableDescriptor,
 	for rows.Next() {
 		var m ITableDescriptor
 		if err := rows.Scan(&m.Name, &m.Type, &m.Descriptor); err != nil {
+			return nil, err
+		}
+		results = append(results, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+func (p *postgresServiceImpl) TableInfo(table string) ([]ITableInfo, error) {
+	s := `
+	SELECT
+		column_name,
+		data_type,
+		character_maximum_length
+	FROM
+		information_schema.columns
+	WHERE
+		table_name = $1;
+	`
+	rows, err := p.dbConn.Query(s, table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var results []ITableInfo
+	for rows.Next() {
+		var m ITableInfo
+		if err := rows.Scan(&m.Column, &m.Type, &m.MaxLength); err != nil {
 			return nil, err
 		}
 		results = append(results, m)
