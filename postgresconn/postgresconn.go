@@ -10,22 +10,51 @@ import (
 	"github.com/sivaosorg/govm/dbx"
 	"github.com/sivaosorg/govm/logger"
 	"github.com/sivaosorg/govm/postgres"
+	"github.com/sivaosorg/govm/utils"
 
 	_ "github.com/lib/pq"
 )
 
 var (
-	instance *sqlx.DB
+	instance *Postgres
 	_logger  = logger.NewLogger()
 )
 
-func NewClient(config postgres.PostgresConfig) (*sqlx.DB, dbx.Dbx) {
+func NewPostgres() *Postgres {
+	p := &Postgres{}
+	return p
+}
+
+func (p *Postgres) SetConn(value *sqlx.DB) *Postgres {
+	p.conn = value
+	return p
+}
+
+func (p *Postgres) SetConfig(value postgres.PostgresConfig) *Postgres {
+	p.Config = value
+	return p
+}
+
+func (p *Postgres) SetState(value dbx.Dbx) *Postgres {
+	p.State = value
+	return p
+}
+
+func (p *Postgres) Close() error {
+	return p.conn.Close()
+}
+
+func (p *Postgres) Json() string {
+	return utils.ToJson(p)
+}
+
+func NewClient(config postgres.PostgresConfig) (*Postgres, dbx.Dbx) {
 	s := dbx.NewDbx().SetDatabase(config.Database)
 	if !config.IsEnabled {
 		s.SetConnected(false).
 			SetMessage("Postgres unavailable").
 			SetError(fmt.Errorf(s.Message))
-		return &sqlx.DB{}, *s
+		return &Postgres{}, *s
 	}
 	if instance != nil {
 		s.SetConnected(true)
@@ -53,20 +82,22 @@ func NewClient(config postgres.PostgresConfig) (*sqlx.DB, dbx.Dbx) {
 	}
 	client.SetMaxIdleConns(config.MaxIdleConn)
 	client.SetMaxOpenConns(config.MaxOpenConn)
-	instance = client
+	instance = NewPostgres().SetConn(client)
+	s.SetConnected(true).SetMessage("Connection established").SetNewInstance(true)
 	if config.DebugMode {
 		callback.MeasureTime(func() {
-			pid, err := GetPostgresPIDConn(instance)
+			pid, err := GetPidConn(instance)
 			if err == nil {
 				_logger.Info("Postgres client connection PID:: %d", pid)
 			}
+			s.SetPid(pid)
 		})
 	}
-	s.SetConnected(true).SetMessage("Connection established")
+	instance.SetState(*s)
 	return instance, *s
 }
 
-func GetPostgresPIDConn(db *sqlx.DB) (int, error) {
+func GetPidConn(db *Postgres) (int, error) {
 	s := NewPostgresService(db)
 	return s.Pid()
 }

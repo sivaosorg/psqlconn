@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jmoiron/sqlx"
-
 	_ "github.com/lib/pq"
 )
 
@@ -31,10 +29,10 @@ type PostgresService interface {
 }
 
 type postgresServiceImpl struct {
-	dbConn *sqlx.DB
+	dbConn *Postgres
 }
 
-func NewPostgresService(dbConn *sqlx.DB) PostgresService {
+func NewPostgresService(dbConn *Postgres) PostgresService {
 	p := &postgresServiceImpl{
 		dbConn: dbConn,
 	}
@@ -43,7 +41,7 @@ func NewPostgresService(dbConn *sqlx.DB) PostgresService {
 
 func (p *postgresServiceImpl) Pid() (int, error) {
 	var pid int
-	err := p.dbConn.QueryRow("SELECT pg_backend_pid() AS pid").Scan(&pid)
+	err := p.dbConn.conn.QueryRow("SELECT pg_backend_pid() AS pid").Scan(&pid)
 	if err != nil {
 		return 0, err
 	}
@@ -52,7 +50,7 @@ func (p *postgresServiceImpl) Pid() (int, error) {
 
 func (p *postgresServiceImpl) Tables() ([]string, error) {
 	var tableNames []string
-	err := p.dbConn.Select(&tableNames, "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'")
+	err := p.dbConn.conn.Select(&tableNames, "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'")
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +59,7 @@ func (p *postgresServiceImpl) Tables() ([]string, error) {
 
 func (p *postgresServiceImpl) FunctionsDescriptor() ([]string, error) {
 	var functions []string
-	err := p.dbConn.Select(&functions, "SELECT routine_name FROM information_schema.routines WHERE routine_catalog = $1 AND routine_schema = 'public' AND routine_type = 'FUNCTION'", p.Database())
+	err := p.dbConn.conn.Select(&functions, "SELECT routine_name FROM information_schema.routines WHERE routine_catalog = $1 AND routine_schema = 'public' AND routine_type = 'FUNCTION'", p.Database())
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +68,7 @@ func (p *postgresServiceImpl) FunctionsDescriptor() ([]string, error) {
 
 func (p *postgresServiceImpl) Database() string {
 	var database string
-	err := p.dbConn.Get(&database, "SELECT current_database()")
+	err := p.dbConn.conn.Get(&database, "SELECT current_database()")
 	if err != nil {
 		panic(err)
 	}
@@ -79,7 +77,7 @@ func (p *postgresServiceImpl) Database() string {
 
 func (p *postgresServiceImpl) ProceduresDescriptor() ([]string, error) {
 	var procedures []string
-	err := p.dbConn.Select(&procedures, "SELECT routine_name FROM information_schema.routines WHERE routine_catalog = $1 AND routine_schema = 'public' AND routine_type = 'PROCEDURE'", p.Database())
+	err := p.dbConn.conn.Select(&procedures, "SELECT routine_name FROM information_schema.routines WHERE routine_catalog = $1 AND routine_schema = 'public' AND routine_type = 'PROCEDURE'", p.Database())
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +86,7 @@ func (p *postgresServiceImpl) ProceduresDescriptor() ([]string, error) {
 
 func (p *postgresServiceImpl) FunctionDDescriptor(function string) ([]IFunctionDescriptor, error) {
 	var functionDetails []IFunctionDescriptor
-	err := p.dbConn.Select(&functionDetails, `
+	err := p.dbConn.conn.Select(&functionDetails, `
 	SELECT 
 		r.routine_name, 
 		p.data_type, 
@@ -109,7 +107,7 @@ func (p *postgresServiceImpl) FunctionDDescriptor(function string) ([]IFunctionD
 
 func (p *postgresServiceImpl) FunctionReturnType(function string) (string, error) {
 	var returnType string
-	err := p.dbConn.QueryRow("SELECT pg_get_function_result(oid) FROM pg_proc WHERE proname = $1", function).Scan(&returnType)
+	err := p.dbConn.conn.QueryRow("SELECT pg_get_function_result(oid) FROM pg_proc WHERE proname = $1", function).Scan(&returnType)
 	if err != nil {
 		return "", err
 	}
@@ -145,7 +143,7 @@ func (p *postgresServiceImpl) AddFunction(function string) (string, error) {
 
 func (ps *postgresServiceImpl) FunctionDescriptor(function string) (string, error) {
 	var functionContent string
-	err := ps.dbConn.QueryRow("SELECT pg_get_functiondef($1::regproc)", function).Scan(&functionContent)
+	err := ps.dbConn.conn.QueryRow("SELECT pg_get_functiondef($1::regproc)", function).Scan(&functionContent)
 	if err != nil {
 		return "", err
 	}
@@ -154,7 +152,7 @@ func (ps *postgresServiceImpl) FunctionDescriptor(function string) (string, erro
 
 func (p *postgresServiceImpl) ProcedureDescriptor(procedure string) (string, error) {
 	var procedureContent string
-	err := p.dbConn.QueryRow("SELECT pg_get_functiondef($1::regproc)", procedure).Scan(&procedureContent)
+	err := p.dbConn.conn.QueryRow("SELECT pg_get_functiondef($1::regproc)", procedure).Scan(&procedureContent)
 	if err != nil {
 		return "", err
 	}
@@ -162,7 +160,7 @@ func (p *postgresServiceImpl) ProcedureDescriptor(procedure string) (string, err
 }
 
 func (p *postgresServiceImpl) ExplainAnalysis(query string) (string, error) {
-	rows, err := p.dbConn.Query(fmt.Sprintf("EXPLAIN ANALYZE %v", query))
+	rows, err := p.dbConn.conn.Query(fmt.Sprintf("EXPLAIN ANALYZE %v", query))
 	if err != nil {
 		return "", err
 	}
@@ -195,7 +193,7 @@ func (p *postgresServiceImpl) ExecuteBatch(statements []string) error {
 	if len(statements) == 0 {
 		return fmt.Errorf("missing statements")
 	}
-	tx, err := p.dbConn.Beginx()
+	tx, err := p.dbConn.conn.Beginx()
 	if err != nil {
 		return err
 	}
@@ -219,7 +217,7 @@ func (p *postgresServiceImpl) ExecuteBatch(statements []string) error {
 }
 
 func (p *postgresServiceImpl) ExecuteBatchWithTransaction(statements []string) error {
-	tx, err := p.dbConn.Beginx()
+	tx, err := p.dbConn.conn.Beginx()
 	if err != nil {
 		return err
 	}
@@ -258,7 +256,7 @@ func (p *postgresServiceImpl) TableDescriptor(table string) ([]ITableDescriptor,
 	FROM pg_indexes
 	WHERE tablename = $1;
 	`
-	rows, err := p.dbConn.Query(s, table)
+	rows, err := p.dbConn.conn.Query(s, table)
 	if err != nil {
 		return nil, err
 	}
@@ -288,7 +286,7 @@ func (p *postgresServiceImpl) TableInfo(table string) ([]ITableInfo, error) {
 	WHERE
 		table_name = $1;
 	`
-	rows, err := p.dbConn.Query(s, table)
+	rows, err := p.dbConn.conn.Query(s, table)
 	if err != nil {
 		return nil, err
 	}

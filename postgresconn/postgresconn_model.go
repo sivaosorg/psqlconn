@@ -1,6 +1,17 @@
 package postgresconn
 
-import "gopkg.in/guregu/null.v3"
+import (
+	"github.com/jmoiron/sqlx"
+	"github.com/sivaosorg/govm/dbx"
+	"github.com/sivaosorg/govm/postgres"
+	"gopkg.in/guregu/null.v3"
+)
+
+type Postgres struct {
+	conn   *sqlx.DB                `json:"-"`
+	Config postgres.PostgresConfig `json:"config,omitempty"`
+	State  dbx.Dbx                 `json:"state,omitempty"`
+}
 
 type IFunctionDescriptor struct {
 	RoutineName   string `db:"routine_name" json:"routine_name,omitempty"`
