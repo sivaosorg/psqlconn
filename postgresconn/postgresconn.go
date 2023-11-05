@@ -48,6 +48,10 @@ func (p *Postgres) Json() string {
 	return utils.ToJson(p)
 }
 
+func (p *Postgres) GetConn() *sqlx.DB {
+	return p.conn
+}
+
 func NewClient(config postgres.PostgresConfig) (*Postgres, dbx.Dbx) {
 	s := dbx.NewDbx().SetDatabase(config.Database)
 	if !config.IsEnabled {
