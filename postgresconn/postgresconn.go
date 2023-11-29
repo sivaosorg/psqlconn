@@ -3,6 +3,7 @@ package postgresconn
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/sivaosorg/govm/callback"
@@ -58,7 +59,8 @@ func NewClient(config postgres.PostgresConfig) (*Postgres, dbx.Dbx) {
 		s.SetConnected(false).
 			SetMessage("Postgres unavailable").
 			SetError(fmt.Errorf(s.Message))
-		return &Postgres{}, *s
+		instance = NewPostgres().SetState(*s)
+		return instance, *s
 	}
 	if instance != nil {
 		s.SetConnected(true)
@@ -72,14 +74,16 @@ func NewClient(config postgres.PostgresConfig) (*Postgres, dbx.Dbx) {
 	client, err := sqlx.Open(common.EntryKeyPostgres, stringConn)
 	if err != nil {
 		s.SetError(err).SetConnected(false).SetMessage(err.Error())
-		return nil, *s
+		instance = NewPostgres().SetState(*s)
+		return instance, *s
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), config.Timeout)
 	defer cancel()
 	err = client.PingContext(ctx)
 	if err != nil {
 		s.SetError(err).SetConnected(false).SetMessage(err.Error())
-		return nil, *s
+		instance = NewPostgres().SetState(*s)
+		return instance, *s
 	}
 	if config.DebugMode {
 		_logger.Info(fmt.Sprintf("Connected successfully to postgres database %s:%d/%s", config.Host, config.Port, config.Database))
@@ -87,7 +91,7 @@ func NewClient(config postgres.PostgresConfig) (*Postgres, dbx.Dbx) {
 	client.SetMaxIdleConns(config.MaxIdleConn)
 	client.SetMaxOpenConns(config.MaxOpenConn)
 	instance = NewPostgres().SetConn(client)
-	s.SetConnected(true).SetMessage("Connection established").SetNewInstance(true)
+	s.SetConnected(true).SetMessage("Connection established").SetNewInstance(true).SetPid(os.Getpid())
 	if config.DebugMode {
 		callback.MeasureTime(func() {
 			pid, err := GetPidConn(instance)
