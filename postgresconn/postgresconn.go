@@ -91,7 +91,7 @@ func NewClient(config postgres.PostgresConfig) (*Postgres, dbx.Dbx) {
 	client.SetMaxIdleConns(config.MaxIdleConn)
 	client.SetMaxOpenConns(config.MaxOpenConn)
 	instance = NewPostgres().SetConn(client)
-	s.SetConnected(true).SetMessage("Connection successfully").SetNewInstance(true).SetPid(os.Getpid())
+	s.SetConnected(true).SetMessage("Connected successfully").SetNewInstance(true).SetPid(os.Getpid())
 	if config.DebugMode {
 		callback.MeasureTime(func() {
 			pid, err := GetPidConn(instance)
