@@ -17,8 +17,7 @@ import (
 )
 
 var (
-	instance *Postgres
-	_logger  = logger.NewLogger()
+	_logger = logger.NewLogger()
 )
 
 func NewPostgres() *Postgres {
@@ -54,16 +53,13 @@ func (p *Postgres) GetConn() *sqlx.DB {
 }
 
 func NewClient(config postgres.PostgresConfig) (*Postgres, dbx.Dbx) {
+	instance := NewPostgres()
 	s := dbx.NewDbx().SetDatabase(config.Database)
 	if !config.IsEnabled {
 		s.SetConnected(false).
 			SetMessage("Postgres unavailable").
 			SetError(fmt.Errorf(s.Message))
-		instance = NewPostgres().SetState(*s)
-		return instance, *s
-	}
-	if instance != nil {
-		s.SetConnected(true)
+		instance.SetState(*s)
 		return instance, *s
 	}
 	stringConn := fmt.Sprintf("host=%s port=%d user=%s dbname=%s password=%s sslmode=%s",
@@ -74,7 +70,7 @@ func NewClient(config postgres.PostgresConfig) (*Postgres, dbx.Dbx) {
 	client, err := sqlx.Open(common.EntryKeyPostgres, stringConn)
 	if err != nil {
 		s.SetError(err).SetConnected(false).SetMessage(err.Error())
-		instance = NewPostgres().SetState(*s)
+		instance.SetState(*s)
 		return instance, *s
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), config.Timeout)
@@ -82,7 +78,7 @@ func NewClient(config postgres.PostgresConfig) (*Postgres, dbx.Dbx) {
 	err = client.PingContext(ctx)
 	if err != nil {
 		s.SetError(err).SetConnected(false).SetMessage(err.Error())
-		instance = NewPostgres().SetState(*s)
+		instance.SetState(*s)
 		return instance, *s
 	}
 	if config.DebugMode {
@@ -90,7 +86,7 @@ func NewClient(config postgres.PostgresConfig) (*Postgres, dbx.Dbx) {
 	}
 	client.SetMaxIdleConns(config.MaxIdleConn)
 	client.SetMaxOpenConns(config.MaxOpenConn)
-	instance = NewPostgres().SetConn(client)
+	instance.SetConn(client)
 	s.SetConnected(true).SetMessage("Connected successfully").SetNewInstance(true).SetPid(os.Getpid())
 	if config.DebugMode {
 		callback.MeasureTime(func() {
