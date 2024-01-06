@@ -1,4 +1,4 @@
-module github.com/sivaosorg/postgresconn
+module github.com/sivaosorg/psqlconn
 
 go 1.20
 

@@ -1,4 +1,4 @@
-package postgresconn
+package psqlconn
 
 import (
 	"context"
