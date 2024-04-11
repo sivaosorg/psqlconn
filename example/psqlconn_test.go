@@ -14,9 +14,9 @@ func createConn() (*psqlconn.Postgres, dbx.Dbx) {
 		SetDebugMode(false).
 		SetEnabled(true).
 		SetPort(6666).
-		SetUsername("tms_admin").
+		SetUsername("admin").
 		SetDatabase("db").
-		SetPassword("Usfy3siOO%fX"))
+		SetPassword("password"))
 }
 
 func TestConn(t *testing.T) {
